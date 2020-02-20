@@ -1,46 +1,82 @@
-const isCi = require('is-ci')
-
 const noLaunch = process.argv.includes('--no-launch')
-const isWindows = process.platform === 'win32'
 const testMinified = process.argv.includes('--minified')
 const isSauce = process.argv.includes('--sauce')
+const isNetlify = process.argv.includes('--netlify')
 
-module.exports = function (config) {
-  const sauceLabsLaunchers = {
-    sauce_edge_15: {
-      base: 'SauceLabs',
-      browserName: 'MicrosoftEdge',
-      version: '15.15063'
-    },
-    sauce_edge_17: {
-      base: 'SauceLabs',
-      browserName: 'MicrosoftEdge',
-      version: '17.17134'
-    },
-    sauce_iphone: {
-      base: 'SauceLabs',
-      browserName: 'Safari',
-      deviceName: 'iPhone 7 Simulator',
-      platformName: 'iOS',
-      platformVersion: '11.2'
-    },
-    sauce_android_kitkat: {
-      base: 'SauceLabs',
-      deviceName: 'Android Emulator',
-      browserName: 'Browser',
-      platformVersion: '4.4',
-      platformName: 'Android'
-    },
-    sauce_android_marshmallow: {
-      base: 'SauceLabs',
-      deviceName: 'Android Emulator',
-      browserName: 'Chrome',
-      platformVersion: '6.0',
-      platformName: 'Android'
-    }
+if (isNetlify) {
+  process.env.CHROME_BIN = require('puppeteer').executablePath()
+}
+
+const webpackConfig = {
+  devtool: 'inline-source-map',
+  module: {
+    rules: [
+      {
+        test: /\.js$/,
+        exclude: /(node_modules|dist)/,
+        use: {
+          loader: 'babel-loader',
+          options: {/* babel options */}
+        }
+      }
+    ]
   }
-  let browsers = []
+}
 
+const karmaPlugins = [
+  'karma-webpack',
+  'karma-qunit',
+  'karma-spec-reporter',
+  'karma-sourcemap-loader',
+  'karma-chrome-launcher',
+  'karma-firefox-launcher',
+  'karma-ie-launcher',
+  'karma-sauce-launcher'
+]
+
+const preprocessors = {
+  'test/qunit/**/*.js': [
+    'webpack',
+    'sourcemap'
+  ],
+}
+
+const sauceLabsLaunchers = {
+  safari: {
+    base: 'SauceLabs',
+    browserName: 'Safari',
+    version: 'latest',
+    platform: 'macOS 10.15'
+  },
+  edge: {
+    base: 'SauceLabs',
+    browserName: 'MicrosoftEdge',
+    browserVersion: '18.17763',
+    platform: 'Windows 10',
+  },
+  ie: {
+    base: 'SauceLabs',
+    browserName: 'internet explorer',
+    platformVersion: '11.0',
+    platform: 'Windows 7'
+  },
+  iphone: {
+    base: 'SauceLabs',
+    browserName: 'Safari',
+    deviceName: 'iPhone Simulator',
+    platformName: 'iOS',
+    platformVersion: 'latest'
+  },
+}
+
+function checkSauceCredentials () {
+  if (!process.env.SAUCE_USERNAME || !process.env.SAUCE_ACCESS_KEY) {
+    console.error('SAUCE_USERNAME and SAUCE_ACCESS_KEY environment variables must be set')
+    process.exit(1)
+  }
+}
+
+function getFiles () {
   let files
   if (testMinified) {
     files = [
@@ -52,95 +88,52 @@ module.exports = function (config) {
       'dist/sweetalert2.js'
     ]
   }
-  files = files.concat([
+  return files.concat([
     'node_modules/promise-polyfill/dist/polyfill.min.js',
     'test/qunit/**/*.js'
   ])
+}
 
-  const reporters = ['spec', 'saucelabs']
-
-  if (!noLaunch) {
-    // Cron on Travis or check:qunit --sauce
-    if (isSauce) {
-      if (!process.env.SAUCE_USERNAME || !process.env.SAUCE_ACCESS_KEY) {
-        console.error('SAUCE_USERNAME and SAUCE_ACCESS_KEY environment variables must be set')
-        process.exit(1)
-      }
-      browsers = Object.keys(sauceLabsLaunchers)
-    } else if (isCi) {
-      // AppVeyor
-      if (isWindows) {
-        browsers = ['IE']
-      // Travis
-      } else {
-        browsers = ['ChromeHeadless', 'Firefox']
-        if (!testMinified) {
-          reporters.push('coverage')
-        }
-      }
-    } else {
-      // Local development
-      browsers = ['Chrome']
-      reporters.push('coverage')
-    }
+function getBrowsers () {
+  if (noLaunch) {
+    return []
   }
+
+  let browsers = ['ChromeHeadless']
+
+  // Cron on GitHub Actions or check:qunit --sauce
+  if (isSauce) {
+    checkSauceCredentials()
+    browsers = Object.keys(sauceLabsLaunchers)
+
+  // GitHub Actions
+  } else if (process.env.GITHUB_ACTION) {
+    browsers = ['ChromeHeadless', 'FirefoxHeadless']
+  }
+
+  return browsers
+}
+
+module.exports = function (config) {
   config.set({
     port: 3000,
-    frameworks: [
-      'qunit'
-    ],
-    qunit: {
-      reorder: false
-    },
+    plugins: karmaPlugins,
+
+    frameworks: ['qunit'],
+    qunit: { reorder: false },
+
     customLaunchers: sauceLabsLaunchers,
-    browsers,
-    reporters,
-    preprocessors: {
-      'test/qunit/**/*.js': [
-        'webpack',
-        'sourcemap'
-      ],
-      'dist/*.js': [
-        'coverage'
-      ]
-    },
-    coverageReporter: {
-      dir: 'coverage',
-      reporters: [
-        { type: 'html', subdir: '.' },
-        { type: 'lcov', subdir: '.' }
-      ]
-    },
-    files,
-    webpack: {
-      devtool: 'inline-source-map',
-      module: {
-        rules: [
-          {
-            test: /\.js$/,
-            exclude: /(node_modules|dist)/,
-            use: {
-              loader: 'babel-loader',
-              options: {/* babel options */}
-            }
-          }
-        ]
-      }
-    },
+
+    files: getFiles(),
+    browsers: getBrowsers(),
+    reporters: ['spec', 'saucelabs'],
+    preprocessors,
+
+    webpack: webpackConfig,
     webpackMiddleware: {
       stats: 'errors-only'
     },
-    plugins: [
-      'karma-coverage',
-      'karma-webpack',
-      'karma-qunit',
-      'karma-spec-reporter',
-      'karma-sourcemap-loader',
-      'karma-chrome-launcher',
-      'karma-firefox-launcher',
-      'karma-ie-launcher',
-      'karma-sauce-launcher'
-    ],
+
     captureTimeout: 360000,
     browserNoActivityTimeout: 360000
   })

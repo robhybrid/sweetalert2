@@ -1,13 +1,10 @@
-const {$, Swal, SwalWithoutAnimation, isVisible, TIMEOUT, triggerKeydownEvent, dispatchCustomEvent} = require('../helpers')
-const sinon = require('sinon')
-const { detect } = require('detect-browser')
-
-const browser = detect()
+const { $, Swal, SwalWithoutAnimation, isVisible, TIMEOUT, triggerKeydownEvent, dispatchCustomEvent, isIE } = require('../helpers')
+const sinon = require('sinon/pkg/sinon')
 
 QUnit.test('should throw console error about unexpected input type', (assert) => {
   const _consoleError = console.error
   const spy = sinon.spy(console, 'error')
-  Swal({input: 'invalid-input-type'})
+  Swal.fire({ input: 'invalid-input-type' })
   console.error = _consoleError
   assert.ok(spy.calledWith('SweetAlert2: Unexpected type of input! Expected "text", "email", "password", "number", "tel", "select", "radio", "checkbox", "textarea", "file" or "url", got "invalid-input-type"'))
 })
@@ -16,23 +13,21 @@ QUnit.test('input text', (assert) => {
   const done = assert.async()
 
   const string = 'Live for yourself'
-  Swal({
+  Swal.fire({
     input: 'text',
-    inputClass: 'custom-input-class'
   }).then((result) => {
     assert.equal(result.value, string)
-    assert.ok(Swal.getInput().classList.contains('custom-input-class'))
     done()
   })
 
-  $('.swal2-input').value = string
+  Swal.getInput().value = string
   Swal.clickConfirm()
 })
 
 QUnit.test('input textarea', (assert) => {
   const done = assert.async()
 
-  Swal({
+  Swal.fire({
     input: 'textarea',
     inputAutoTrim: false
   }).then((result) => {
@@ -52,7 +47,7 @@ QUnit.test('input email + built-in email validation', (assert) => {
 
   const invalidEmailAddress = 'blah-blah@zzz'
   const validEmailAddress = 'team+support+a.b@example.com'
-  SwalWithoutAnimation({input: 'email'}).then((result) => {
+  SwalWithoutAnimation.fire({ input: 'email' }).then((result) => {
     assert.equal(result.value, validEmailAddress)
     done()
   })
@@ -60,8 +55,8 @@ QUnit.test('input email + built-in email validation', (assert) => {
   Swal.getInput().value = invalidEmailAddress
   Swal.clickConfirm()
   setTimeout(() => {
-    assert.ok(isVisible($('.swal2-validationerror')))
-    assert.ok($('.swal2-validationerror').textContent.indexOf('Invalid email address') !== -1)
+    assert.ok(isVisible(Swal.getValidationMessage()))
+    assert.ok(Swal.getValidationMessage().textContent.indexOf('Invalid email address') !== -1)
 
     Swal.getInput().value = validEmailAddress
     triggerKeydownEvent(Swal.getInput(), 'Enter')
@@ -73,7 +68,7 @@ QUnit.test('input url + built-in url validation', (assert) => {
 
   const invalidUrl = 'sweetalert2.github.io'
   const validUrl = 'https://sweetalert2.github.io/'
-  SwalWithoutAnimation({input: 'url'}).then((result) => {
+  SwalWithoutAnimation.fire({ input: 'url' }).then((result) => {
     assert.equal(result.value, validUrl)
     done()
   })
@@ -81,8 +76,8 @@ QUnit.test('input url + built-in url validation', (assert) => {
   Swal.getInput().value = invalidUrl
   Swal.clickConfirm()
   setTimeout(() => {
-    assert.ok(isVisible($('.swal2-validationerror')))
-    assert.ok($('.swal2-validationerror').textContent.indexOf('Invalid URL') !== -1)
+    assert.ok(isVisible(Swal.getValidationMessage()))
+    assert.ok(Swal.getValidationMessage().textContent.indexOf('Invalid URL') !== -1)
 
     Swal.getInput().value = validUrl
     triggerKeydownEvent(Swal.getInput(), 'Enter')
@@ -93,9 +88,9 @@ QUnit.test('input select', (assert) => {
   const done = assert.async()
 
   const selected = 'dos'
-  Swal({
+  Swal.fire({
     input: 'select',
-    inputOptions: {uno: 1, dos: 2},
+    inputOptions: { uno: 1, dos: 2 },
     inputPlaceholder: 'Choose a number'
   }).then((result) => {
     assert.equal(result.value, selected)
@@ -113,10 +108,24 @@ QUnit.test('input select', (assert) => {
   Swal.clickConfirm()
 })
 
+QUnit.test('input text w/ inputPlaceholder as configuration', (assert) => {
+  const done = assert.async()
+
+  Swal.fire({
+    input: 'text',
+    inputPlaceholder: 'placeholder text'
+  })
+
+  assert.equal(Swal.getInput().value, '')
+  assert.equal(Swal.getInput().placeholder, 'placeholder text')
+
+  done()
+})
+
 QUnit.test('input checkbox', (assert) => {
   const done = assert.async()
 
-  Swal({input: 'checkbox', inputAttributes: {name: 'test-checkbox'}}).then((result) => {
+  Swal.fire({ input: 'checkbox', inputAttributes: { name: 'test-checkbox' } }).then((result) => {
     assert.equal(checkbox.getAttribute('name'), 'test-checkbox')
     assert.equal(result.value, '1')
     done()
@@ -128,14 +137,14 @@ QUnit.test('input checkbox', (assert) => {
 })
 
 QUnit.test('input range', (assert) => {
-  Swal({input: 'range', inputAttributes: {min: 1, max: 10}, inputValue: 5})
+  Swal.fire({ input: 'range', inputAttributes: { min: 1, max: 10 }, inputValue: 5 })
   const input = Swal.getInput()
   const output = $('.swal2-range output')
   assert.equal(input.getAttribute('min'), '1')
   assert.equal(input.getAttribute('max'), '10')
   assert.equal(input.value, '5')
 
-  if (browser.name !== 'ie') { // TODO (@limonte): make IE happy
+  if (!isIE) { // TODO (@limonte): make IE happy
     input.value = 10
     dispatchCustomEvent(input, 'input')
     assert.equal(output.textContent, '10')
@@ -146,51 +155,93 @@ QUnit.test('input range', (assert) => {
   }
 })
 
-if (typeof Map !== 'undefined') { // There's no Map in Adroid 4.4 - skip tests
-  QUnit.test('input type "select", inputOptions Map', (assert) => {
-    const inputOptions = new Map()
-    inputOptions.set(2, 'Richard Stallman')
-    inputOptions.set(1, 'Linus Torvalds')
-    SwalWithoutAnimation({
-      input: 'select',
-      inputOptions,
-      inputValue: 1
-    })
-    assert.equal($('.swal2-select').querySelectorAll('option').length, 2)
-    assert.equal($('.swal2-select option:nth-child(1)').innerHTML, 'Richard Stallman')
-    assert.equal($('.swal2-select option:nth-child(1)').value, '2')
-    assert.equal($('.swal2-select option:nth-child(2)').innerHTML, 'Linus Torvalds')
-    assert.equal($('.swal2-select option:nth-child(2)').value, '1')
-    assert.equal($('.swal2-select option:nth-child(2)').selected, true)
+QUnit.test('input type "select", inputOptions Map', (assert) => {
+  const inputOptions = new Map()
+  inputOptions.set(2, 'Richard Stallman')
+  inputOptions.set(1, 'Linus Torvalds')
+  SwalWithoutAnimation.fire({
+    input: 'select',
+    inputOptions,
+    inputValue: 1
   })
+  assert.equal($('.swal2-select').querySelectorAll('option').length, 2)
+  assert.equal($('.swal2-select option:nth-child(1)').innerHTML, 'Richard Stallman')
+  assert.equal($('.swal2-select option:nth-child(1)').value, '2')
+  assert.equal($('.swal2-select option:nth-child(2)').innerHTML, 'Linus Torvalds')
+  assert.equal($('.swal2-select option:nth-child(2)').value, '1')
+  assert.equal($('.swal2-select option:nth-child(2)').selected, true)
+})
 
-  QUnit.test('input type "radio", inputOptions Map', (assert) => {
-    const inputOptions = new Map()
-    inputOptions.set(2, 'Richard Stallman')
-    inputOptions.set(1, 'Linus Torvalds')
-    Swal({
-      input: 'radio',
-      inputOptions,
-      inputValue: 1
-    })
-    assert.equal($('.swal2-radio').querySelectorAll('label').length, 2)
-    assert.equal($('.swal2-radio label:nth-child(1)').textContent, 'Richard Stallman')
-    assert.equal($('.swal2-radio label:nth-child(1) input').value, '2')
-    assert.equal($('.swal2-radio label:nth-child(2)').textContent, 'Linus Torvalds')
-    assert.equal($('.swal2-radio label:nth-child(2) input').value, '1')
-    assert.equal($('.swal2-radio label:nth-child(2) input').checked, true)
+QUnit.test('input type "radio", inputOptions Map', (assert) => {
+  const inputOptions = new Map()
+  inputOptions.set(2, 'Richard Stallman')
+  inputOptions.set(1, 'Linus Torvalds')
+  Swal.fire({
+    input: 'radio',
+    inputOptions,
+    inputValue: 1
   })
-}
+  assert.equal($('.swal2-radio').querySelectorAll('label').length, 2)
+  assert.equal($('.swal2-radio label:nth-child(1)').textContent, 'Richard Stallman')
+  assert.equal($('.swal2-radio label:nth-child(1) input').value, '2')
+  assert.equal($('.swal2-radio label:nth-child(2)').textContent, 'Linus Torvalds')
+  assert.equal($('.swal2-radio label:nth-child(2) input').value, '1')
+  assert.equal($('.swal2-radio label:nth-child(2) input').checked, true)
+})
 
 QUnit.test('input radio', (assert) => {
-  Swal({
+  Swal.fire({
     input: 'radio',
     inputOptions: {
-      'one': 'one',
-      'two': 'two'
+      one: 'one',
+      two: 'two'
     }
   })
 
   assert.equal($('.swal2-radio').querySelectorAll('label').length, 2)
   assert.equal($('.swal2-radio').querySelectorAll('input[type="radio"]').length, 2)
+})
+
+QUnit.test('Swal.getInput() should be available in .then()', (assert) => {
+  const done = assert.async()
+
+  SwalWithoutAnimation.fire({
+    input: 'text',
+  }).then(() => {
+    assert.ok(Swal.getInput())
+    done()
+  })
+  Swal.close()
+})
+
+QUnit.test('Swal.getInput() should return null when a popup is disposed', (assert) => {
+  const done = assert.async()
+
+  SwalWithoutAnimation.fire({
+    input: 'text',
+    onAfterClose: () => {
+      setTimeout(() => {
+        assert.notOk(Swal.getInput())
+        done()
+      }, TIMEOUT)
+    }
+  })
+  Swal.close()
+})
+
+QUnit.test('popup should expand and shrink accordingly to textarea width', (assert) => {
+  const done = assert.async()
+  SwalWithoutAnimation.fire({
+    input: 'textarea',
+  })
+  Swal.getInput().style.width = '600px'
+  setTimeout(() => {
+    assert.equal(Swal.getPopup().style.width, '640px')
+
+    Swal.getInput().style.width = '100px'
+    setTimeout(() => {
+      assert.equal(Swal.getPopup().style.width, '')
+      done()
+    })
+  })
 })
